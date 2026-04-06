@@ -23,6 +23,7 @@ module.exports = {
 
         // ボタン操作の処理
         if (interaction.isButton()) {
+            // --- レポート解決ボタン (既存) ---
             if (interaction.customId.startsWith('resolve_report_')) {
                 const reportId = interaction.customId.replace('resolve_report_', '');
 
@@ -71,6 +72,87 @@ module.exports = {
                 // スレッドに通知
                 if (interaction.channel.isThread()) {
                     await interaction.channel.send(`このレポートは ${interaction.user} によって解決済みとしてマークされました。`);
+                }
+                return;
+            }
+
+            // --- ボイチャ募集ボタン ---
+            if (interaction.customId.startsWith('vc_recruit_')) {
+                const parts = interaction.customId.split('_');
+                const action = parts[2]; // join, later, close
+
+                // データベースから募集情報を取得
+                const { data: recruit, error } = await supabase
+                    .from('recruitments')
+                    .select('*')
+                    .eq('message_id', interaction.message.id)
+                    .single();
+
+                if (error || !recruit) {
+                    return interaction.reply({ content: '募集情報が見つかりませんでした。', ephemeral: true });
+                }
+
+                if (recruit.status === 'closed' && action !== 'close') {
+                    return interaction.reply({ content: 'この募集は既に締め切られています。', ephemeral: true });
+                }
+
+                const voiceChannel = await interaction.guild.channels.fetch(recruit.voice_channel_id);
+
+                if (action === 'join') {
+                    await interaction.reply({ 
+                        content: `🔊 ボイスチャンネル「${voiceChannel.name}」に参加しましょう！\n${voiceChannel.url}`, 
+                        ephemeral: true 
+                    });
+                } else if (action === 'later') {
+                    const laterUsers = recruit.later_users || [];
+                    if (laterUsers.includes(interaction.user.id)) {
+                        return interaction.reply({ content: '既に参加予定リストに追加されています。', ephemeral: true });
+                    }
+
+                    laterUsers.push(interaction.user.id);
+                    await supabase
+                        .from('recruitments')
+                        .update({ later_users: laterUsers })
+                        .eq('id', recruit.id);
+
+                    const oldEmbed = interaction.message.embeds[0];
+                    const newEmbed = EmbedBuilder.from(oldEmbed);
+                    
+                    const laterUserMentions = laterUsers.map(id => `<@${id}>`).join(', ');
+                    
+                    // 「後で参加」フィールドを更新または追加
+                    const fields = [...oldEmbed.fields];
+                    const laterFieldIndex = fields.findIndex(f => f.name === '後で参加');
+                    if (laterFieldIndex !== -1) {
+                        fields[laterFieldIndex] = { name: '後で参加', value: laterUserMentions, inline: false };
+                    } else {
+                        fields.push({ name: '後で参加', value: laterUserMentions, inline: false });
+                    }
+                    newEmbed.setFields(fields);
+
+                    await interaction.message.edit({ embeds: [newEmbed] });
+                    await interaction.reply({ content: '参加予定リストに追加しました！', ephemeral: true });
+                } else if (action === 'close') {
+                    if (interaction.user.id !== recruit.recruiter_id) {
+                        return interaction.reply({ content: '募集を締め切ることができるのは募集者のみです。', ephemeral: true });
+                    }
+
+                    if (recruit.status === 'closed') {
+                        return interaction.reply({ content: '既に締め切られています。', ephemeral: true });
+                    }
+
+                    await supabase
+                        .from('recruitments')
+                        .update({ status: 'closed' })
+                        .eq('id', recruit.id);
+
+                    const oldEmbed = interaction.message.embeds[0];
+                    const newEmbed = EmbedBuilder.from(oldEmbed)
+                        .setTitle(`[〆切] ${oldEmbed.title}`)
+                        .setColor(0x7F8C8D); // 灰色
+                    
+                    await interaction.message.edit({ embeds: [newEmbed], components: [] });
+                    await interaction.reply({ content: '募集を締め切りました。', ephemeral: true });
                 }
             }
         }

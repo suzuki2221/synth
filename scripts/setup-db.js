@@ -6,10 +6,11 @@ async function setupDatabase() {
         return;
     }
 
-    console.log('Creating reports table...');
+    console.log('Updating database tables...');
 
     const { error } = await supabaseAdmin.rpc('exec_sql', {
         query: `
+            -- reports テーブル
             CREATE TABLE IF NOT EXISTS reports (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 report_name TEXT NOT NULL,
@@ -17,18 +18,31 @@ async function setupDatabase() {
                 channel_id TEXT NOT NULL,
                 guild_id TEXT NOT NULL,
                 thread_id TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'unresolved', -- unresolved, answered, resolved
+                status TEXT NOT NULL DEFAULT 'unresolved',
                 reporter_id TEXT NOT NULL,
                 responder_id TEXT,
                 approver_id TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+            );
+
+            -- recruitments テーブル
+            CREATE TABLE IF NOT EXISTS recruitments (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                guild_id TEXT NOT NULL,
+                channel_id TEXT NOT NULL,
+                message_id TEXT NOT NULL,
+                voice_channel_id TEXT NOT NULL,
+                game_name TEXT NOT NULL,
+                target_role_id TEXT NOT NULL,
+                recruiter_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'open', -- open, closed
+                later_users TEXT[] DEFAULT '{}',
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
             );
         `
     });
 
     if (error) {
-        // exec_sql が定義されていない場合（デフォルトではない）は、SQL Editorでの実行を促すメッセージを出すか、
-        // 簡易的なテーブル操作を試みる必要があります。
         console.log('⚠️ RPC "exec_sql" が定義されていない可能性があります。Supabase ダッシュボードの SQL Editor で以下の SQL を実行してください:');
         console.log(`
 CREATE TABLE IF NOT EXISTS reports (
@@ -44,10 +58,25 @@ CREATE TABLE IF NOT EXISTS reports (
     approver_id TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS recruitments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    voice_channel_id TEXT NOT NULL,
+    game_name TEXT NOT NULL,
+    target_role_id TEXT NOT NULL,
+    recruiter_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    later_users TEXT[] DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
         `);
     } else {
-        console.log('✅ reports テーブルが正常に作成されました（または既に存在します）。');
+        console.log('✅ データベーステーブルが正常に作成/更新されました。');
     }
 }
 
 setupDatabase();
+

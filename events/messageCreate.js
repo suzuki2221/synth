@@ -6,6 +6,75 @@ module.exports = {
     async execute(message) {
         if (message.author.bot) return;
 
+        // --- ボイチャ募集のトリガー検知 ---
+        const recruitRegex = /^<@&(\d+)> \[(.+)\]$/;
+        const recruitMatch = message.content.match(recruitRegex);
+
+        if (recruitMatch) {
+            const targetRoleId = recruitMatch[1];
+            const gameName = recruitMatch[2];
+
+            // 送信者がVCに参加しているか確認
+            const voiceChannel = message.member.voice.channel;
+            if (!voiceChannel) {
+                return message.reply('❌ 募集を開始するには、ボイスチャンネルに参加している必要があります。');
+            }
+
+            const memberCount = voiceChannel.members.size;
+
+            const embed = new EmbedBuilder()
+                .setTitle(`🎮 ボイチャ募集: ${gameName}`)
+                .setDescription(`<@&${targetRoleId}> 募集中！`)
+                .addFields(
+                    { name: '募集者', value: `${message.author}`, inline: true },
+                    { name: '参加中', value: `${memberCount} 人`, inline: true },
+                    { name: 'VC', value: `${voiceChannel.name}`, inline: true }
+                )
+                .setColor(0x3498DB)
+                .setTimestamp();
+
+            const row = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`vc_recruit_join_${message.id}`)
+                        .setLabel('参加する')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId(`vc_recruit_later_${message.id}`)
+                        .setLabel('後で参加')
+                        .setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder()
+                        .setCustomId(`vc_recruit_close_${message.id}`)
+                        .setLabel('〆切')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+            const recruitMsg = await message.channel.send({ 
+                content: `<@&${targetRoleId}>`,
+                embeds: [embed], 
+                components: [row] 
+            });
+
+            // Supabaseに保存
+            await supabase
+                .from('recruitments')
+                .insert({
+                    guild_id: message.guildId,
+                    channel_id: message.channelId,
+                    message_id: recruitMsg.id,
+                    voice_channel_id: voiceChannel.id,
+                    game_name: gameName,
+                    target_role_id: targetRoleId,
+                    recruiter_id: message.author.id,
+                    status: 'open'
+                });
+
+            // 元のメッセージを削除（任意ですが、募集メッセージが残るとノイズになるため）
+            // await message.delete().catch(console.error);
+            return;
+        }
+
+        // --- レポート管理のロジック (既存) ---
         // メッセージがスレッド内かどうかを確認
         if (!message.channel.isThread()) return;
 
@@ -47,4 +116,6 @@ module.exports = {
         // ここではスレッド内に確認メッセージを送信します。
         await message.channel.send({ embeds: [embed], components: [row] });
     },
+};
+
 };
