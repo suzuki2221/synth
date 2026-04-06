@@ -15,7 +15,7 @@ module.exports = {
             const gameName = recruitMatch[2];
 
             // 送信者がVCに参加しているか確認
-
+            const voiceChannel = message.member.voice.channel;
             if (!voiceChannel) {
                 return message.reply('❌ 募集を開始するには、ボイスチャンネルに参加している必要があります。');
             }
