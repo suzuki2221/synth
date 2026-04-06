@@ -27,6 +27,7 @@ module.exports = {
                     const voiceChannel = await newState.client.channels.fetch(vcId);
 
                     const memberCount = voiceChannel.members.size;
+                    const memberNames = voiceChannel.members.map(m => m.displayName).join(', ');
 
                     // Embed を更新
                     const oldEmbed = message.embeds[0];
@@ -34,11 +35,15 @@ module.exports = {
 
                     const newEmbed = EmbedBuilder.from(oldEmbed);
                     
-                    // 「参加中」フィールドを更新
+                    // フィールドを更新
                     const fields = [...oldEmbed.fields];
                     const countFieldIndex = fields.findIndex(f => f.name === '参加中');
                     if (countFieldIndex !== -1) {
                         fields[countFieldIndex] = { name: '参加中', value: `${memberCount} 人`, inline: true };
+                    }
+                    const membersFieldIndex = fields.findIndex(f => f.name === '参加メンバー');
+                    if (membersFieldIndex !== -1) {
+                        fields[membersFieldIndex] = { name: '参加メンバー', value: memberNames || 'なし', inline: false };
                     }
                     newEmbed.setFields(fields);
 

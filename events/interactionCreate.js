@@ -151,6 +151,10 @@ module.exports = {
                         .setTitle(`[〆切] ${oldEmbed.title}`)
                         .setColor(0x7F8C8D); // 灰色
                     
+                    // 「参加中」と「参加メンバー」フィールドを削除
+                    const filteredFields = oldEmbed.fields.filter(f => f.name !== '参加中' && f.name !== '参加メンバー');
+                    newEmbed.setFields(filteredFields);
+                    
                     await interaction.message.edit({ embeds: [newEmbed], components: [] });
                     await interaction.reply({ content: '募集を締め切りました。', ephemeral: true });
                 }

@@ -21,6 +21,7 @@ module.exports = {
             }
 
             const memberCount = voiceChannel.members.size;
+            const memberNames = voiceChannel.members.map(m => m.displayName).join('\n');
 
             const embed = new EmbedBuilder()
                 .setTitle(`🎮 ボイチャ募集: ${gameName}`)
@@ -28,6 +29,7 @@ module.exports = {
                 .addFields(
                     { name: '募集者', value: `${message.author}`, inline: true },
                     { name: '参加中', value: `${memberCount} 人`, inline: true },
+                    { name: '参加メンバー', value: "```\n" + memberNames + "\n```" || 'なし', inline: false },
                     { name: 'VC', value: `${voiceChannel.name}`, inline: true }
                 )
                 .setColor(0x3498DB)
