@@ -24,17 +24,6 @@ module.exports = {
         // ボタン操作の処理
         if (interaction.isButton()) {
             if (interaction.customId.startsWith('resolve_report_')) {
-                // 権限確認
-                const requiredPermissionStr = process.env.RESOLVE_PERMISSION || 'ManageMessages';
-                const requiredPermission = PermissionsBitField.Flags[requiredPermissionStr];
-
-                if (requiredPermission && !interaction.member.permissions.has(requiredPermission)) {
-                    return interaction.reply({ 
-                        content: `❌ この操作を行うには ${requiredPermissionStr} 権限が必要です。`, 
-                        ephemeral: true 
-                    });
-                }
-
                 const reportId = interaction.customId.replace('resolve_report_', '');
 
                 // データベースからレポート情報を取得

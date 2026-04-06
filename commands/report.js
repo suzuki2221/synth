@@ -7,7 +7,7 @@ module.exports = {
         .setDescription('レポートを管理します')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
         .addSubcommand(subcommand =>
-...
+            subcommand
                 .setName('add')
                 .setDescription('新しいレポートを追加します')
                 .addStringOption(option =>
@@ -21,9 +21,9 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setTitle(`レポート: ${reportName}`)
             .addFields(
-                { name: 'ステータス', value: '🔴 未解決', inline: true }
+                { name: 'ステータス', value: '⚠️ 未解決', inline: true }
             )
-            .setColor(0xFF0000)
+            .setColor(0xFAC84B)
             .setTimestamp();
 
         const message = await interaction.reply({ embeds: [embed], fetchReply: true });
