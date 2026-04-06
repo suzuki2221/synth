@@ -58,7 +58,7 @@ module.exports = {
                     const originalMessage = await channel.messages.fetch(report.message_id);
 
                     const resolvedEmbed = EmbedBuilder.from(originalMessage.embeds[0])
-                        .setColor(0x00FF00) // 緑色に変更
+                        .setColor("#77b255") // 緑色に変更
                         .setFields({ name: 'ステータス', value: `✅ 解決済み (承認者: ${interaction.user.tag})`, inline: true });
 
                     await originalMessage.edit({ embeds: [resolvedEmbed] });

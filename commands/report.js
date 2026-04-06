@@ -46,23 +46,26 @@ module.exports = {
         await interaction.editReply({ components: [row] });
 
         // 4. Supabaseに保存
+        const reportData = {
+            report_name: reportName,
+            message_id: message.id,
+            channel_id: interaction.channelId,
+            guild_id: interaction.guildId,
+            thread_id: thread.id,
+            status: 'unresolved',
+            reporter_id: interaction.user.id
+        };
+
         const { error } = await supabase
             .from('reports')
-            .insert({
-                report_name: reportName,
-                message_id: message.id,
-                channel_id: interaction.channelId,
-                guild_id: interaction.guildId,
-                thread_id: thread.id,
-                status: 'unresolved',
-                reporter_id: interaction.user.id
-            });
+            .insert(reportData);
 
         if (error) {
             console.error('Supabase 保存エラー:', error);
             await thread.send('⚠️ データベースへの保存に失敗しました。');
         } else {
-            await thread.send(`✅ レポート「${reportName}」のスレッドが作成されました。ここで議論を開始してください。`);
+            const jsonStr = JSON.stringify(reportData, null, 2);
+            await thread.send(`✅ レポート「${reportName}」のスレッドが作成されました。ここで議論を開始してください。\n\n**保存されたデータ:**\n\`\`\`json\n${jsonStr}\n\`\`\``);
         }
     },
 };
