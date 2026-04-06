@@ -1,0 +1,38 @@
+# プロジェクト構成: synth
+
+このプロジェクトは、Discord.js v14 を使用した Discord ボットのテンプレートです。
+
+## ディレクトリ構造
+
+- `index.js`: ボットのメインエントリポイント。
+- `deploy-commands.js`: スラッシュコマンドをグローバルにデプロイするためのスクリプト。
+- `supabase.js`: Supabase クライアントの初期化設定（通常用と管理者用）。
+- `test-supabase.js`: Supabase への接続をテストするためのスクリプト。
+- `commands/`: スラッシュコマンドの定義ファイルを格納するディレクトリ。
+- `events/`: イベントハンドラを格納するディレクトリ。
+- `.env`: 環境変数（トークン、クライアントID、Supabase の資格情報）。
+- `.env.example`: `.env` ファイルのテンプレート。
+
+## 主要な機能
+
+1. **コマンドの動的ロード**: `commands/` ディレクトリ内の JS ファイルを自動的に読み込みます。
+2. **イベントの動的ロード**: `events/` ディレクトリ内の JS ファイルを自動的に読み込みます。
+3. **グローバルコマンドデプロイ**: `deploy-commands.js` を実行することで、すべてのサーバーに対してスラッシュコマンドを公開します。
+4. **データベース (Supabase)**: `@supabase/supabase-js` を使用してデータベース操作が可能です。`supabase.js` をインポートして使用します。
+
+## Gemini によるデータベース操作ガイド
+
+Gemini がテーブル操作やデータ管理を行う際は、以下の手順に従います。
+
+1. **SERVICE_ROLE_KEY の確認**: 管理者レベルの操作（テーブル作成や RLS バイパス）を行うには、`.env` に `SUPABASE_SERVICE_ROLE_KEY` が必要です。
+2. **ワンオフスクリプトの作成**: 特定の操作を行うための Node.js スクリプト（例: `create-table.js`）を作成し、`node` コマンドで実行します。
+3. **RPC (Remote Procedure Call) の利用**: 複雑な SQL 実行が必要な場合は、Supabase ダッシュボードで作成されたファンクションを `supabase.rpc()` で呼び出します。
+4. **スキーマの変更**: テーブル構造を変更する際は、必ず実行する SQL やスクリプトの内容をユーザーに提示し、実行結果を記録します。
+
+## セットアップ
+
+1. `sudo npm install` で依存関係をインストール。
+2. `.env.example` をコピーして `.env` を作成し、必要な情報を入力。
+    - `SUPABASE_SERVICE_ROLE_KEY` は管理操作（Geminiによるテーブル作成など）に必要です。
+3. `node deploy-commands.js` を実行してコマンドを登録。
+4. `node index.js` でボットを起動。
