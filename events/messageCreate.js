@@ -117,5 +117,3 @@ module.exports = {
         await message.channel.send({ embeds: [embed], components: [row] });
     },
 };
-
-};
