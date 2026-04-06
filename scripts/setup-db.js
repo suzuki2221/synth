@@ -1,4 +1,4 @@
-const { supabaseAdmin } = require('./supabase');
+const { supabaseAdmin } = require('../supabase');
 
 async function setupDatabase() {
     if (!supabaseAdmin) {
