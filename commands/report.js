@@ -1,12 +1,13 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const { supabase } = require('../supabase');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('report')
         .setDescription('レポートを管理します')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
         .addSubcommand(subcommand =>
-            subcommand
+...
                 .setName('add')
                 .setDescription('新しいレポートを追加します')
                 .addStringOption(option =>
