@@ -33,7 +33,7 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setTitle('課題解決の確認')
             .setDescription(`${message.author} さんの回答で解決しましたか？解決した場合は下のボタンを押してください。`)
-            .setColor(0x00FF00);
+            .setColor("#77b255");
 
         const row = new ActionRowBuilder()
             .addComponents(
