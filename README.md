@@ -1,0 +1,1 @@
+Gemini CLIのお試しに作ったDiscordJSのボット
