@@ -20,6 +20,7 @@ module.exports = {
         // 1. 初期Embedを送信
         const embed = new EmbedBuilder()
             .setTitle(`レポート: ${reportName}`)
+            .setDescription('このレポートに関する議論はスレッド内で行ってください。')
             .addFields(
                 { name: 'ステータス', value: '⚠️ 未解決', inline: true }
             )

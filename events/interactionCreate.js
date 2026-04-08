@@ -60,6 +60,7 @@ module.exports = {
 
                     const resolvedEmbed = EmbedBuilder.from(originalMessage.embeds[0])
                         .setColor("#77b255") // 緑色に変更
+                        .setDescription('このレポートに関する議論はスレッド内で行ってください。')
                         .setFields({ name: 'ステータス', value: `✅ 解決済み (承認者: ${interaction.user.tag})`, inline: true });
 
                     await originalMessage.edit({ embeds: [resolvedEmbed] });
