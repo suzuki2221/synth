@@ -7,7 +7,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('task-done')
         .setDescription('タスクを終了したタスクとしてマークします')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
         .addStringOption(option =>
             option.setName('id')
                 .setDescription('タスクID')

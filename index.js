@@ -99,7 +99,7 @@ cron.schedule('0 * * * *', async () => {
                 if (taskMsg) {
                     const expiredEmbed = EmbedBuilder.from(taskMsg.embeds[0])
                         .setTitle(`[期限切れ] ${task.name}`)
-                        .setColor(0xFF0000); // 赤色
+                        .setColor("ff4d6b"); // 赤色
                     await taskMsg.edit({ embeds: [expiredEmbed] });
                 }
             }

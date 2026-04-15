@@ -17,37 +17,50 @@ module.exports = {
                 .setRequired(true))
         .addRoleOption(option =>
             option.setName('role')
-                .setDescription('割り当てるロール')
-                .setRequired(true)),
+                .setDescription('割り当てるロール (ユーザー指定がない場合は必須)')
+                .setRequired(false))
+        .addUserOption(option =>
+            option.setName('user')
+                .setDescription('割り当てるユーザー (ロール指定がない場合は必須)')
+                .setRequired(false))
+        .addBooleanOption(option =>
+            option.setName('mention')
+                .setDescription('割り当て時にメンションを送るか')
+                .setRequired(false))
+        .addBooleanOption(option =>
+            option.setName('silent')
+                .setDescription('サイレントメッセージとして送信するか (通知なし)')
+                .setRequired(false)),
     async execute(interaction) {
         const name = interaction.options.getString('name');
         const deadline = interaction.options.getString('deadline');
         const role = interaction.options.getRole('role');
+        const user = interaction.options.getUser('user');
+        const shouldMention = interaction.options.getBoolean('mention') ?? true;
+        const isSilent = interaction.options.getBoolean('silent') ?? false;
 
-        // 日付形式の簡易バリデーション
+        if (!role && !user) {
+            return interaction.reply({ content: 'ロールまたはユーザーのいずれかを指定してください。', ephemeral: true });
+        }
+
         if (!/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
             return interaction.reply({ content: '期限は YYYY-MM-DD 形式で入力してください。', ephemeral: true });
         }
 
-        // ロール人数の取得 (対象ロールのメンバーのみをフェッチして最適化)
-        await interaction.guild.members.fetch({ role: role.id });
-        const totalMembers = role.members.size;
-
-        // 短い固有IDの生成 (6文字)
         const shortId = crypto.randomBytes(3).toString('hex');
-
-        // 管理用クライアントを使用
         const db = supabaseAdmin || require('../supabase').supabase;
 
-        // 一時的にSupabaseに保存
         const { error } = await db
             .from('tasks')
             .insert({
                 id: shortId,
                 name: name,
                 deadline: deadline,
-                role_id: role.id,
-                total_role_count: totalMembers,
+                role_id: role ? role.id : null,
+                user_id: user ? user.id : null,
+                should_mention: shouldMention,
+                is_silent: isSilent,
+                total_role_count: 0,
                 guild_id: interaction.guildId,
                 creator_id: interaction.user.id,
                 status: 'creating'
@@ -58,7 +71,6 @@ module.exports = {
             return interaction.reply({ content: `タスクの作成に失敗しました(DBエラー: ${error.message})`, ephemeral: true });
         }
 
-        // Modalの作成
         const modal = new ModalBuilder()
             .setCustomId(`task_add_modal_${shortId}`)
             .setTitle(`${name} の詳細入力`);
@@ -69,14 +81,7 @@ module.exports = {
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(true);
 
-        const firstActionRow = new ActionRowBuilder().addComponents(detailsInput);
-        modal.addComponents(firstActionRow);
-
-        try {
-            await interaction.showModal(modal);
-        } catch (e) {
-            console.error('Show Modal Error:', e);
-            await interaction.reply({ content: 'モーダルの表示に失敗しました。', ephemeral: true });
-        }
+        modal.addComponents(new ActionRowBuilder().addComponents(detailsInput));
+        await interaction.showModal(modal);
     },
 };

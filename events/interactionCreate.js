@@ -1,6 +1,8 @@
-const { Events, EmbedBuilder, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextInputBuilder, TextInputStyle, ModalBuilder } = require('discord.js');
+const { Events, EmbedBuilder, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextInputBuilder, TextInputStyle, ModalBuilder, MessageFlags } = require('discord.js');
 const { supabase, supabaseAdmin } = require('../supabase');
 require('dotenv').config();
+
+const { getRoleMemberCount } = require('../functions/taskUtils');
 
 // 管理用クライアントを使用 (フォールバックあり)
 const db = supabaseAdmin || supabase;
@@ -58,63 +60,51 @@ module.exports = {
                 const shortId = interaction.customId.replace('task_add_modal_', '');
                 let details = interaction.fields.getTextInputValue('task_details');
                 
-                // タグの解決
                 details = resolveMentions(interaction.guild, details);
-
                 await interaction.deferReply({ ephemeral: true });
 
-                const { data: task, error: fetchError } = await db
-                    .from('tasks')
-                    .select('*')
-                    .eq('id', shortId)
-                    .single();
-
-                if (fetchError || !task) {
-                    console.error('Fetch Task Error:', fetchError);
-                    return interaction.editReply(`タスク情報が見つかりませんでした。 (ID: ${shortId})`);
-                }
+                const { data: task, error: fetchError } = await db.from('tasks').select('*').eq('id', shortId).single();
+                if (fetchError || !task) return interaction.editReply(`タスク情報が見つかりませんでした。 (ID: ${shortId})`);
 
                 try {
-                    // ロールの存在確認
-                    let role = await interaction.guild.roles.fetch(task.role_id);
-                    if (!role) {
-                        return interaction.editReply(`割り当てられたロールが見つかりませんでした。 (ID: ${task.role_id})`);
+                    // 権限オーバーライトの作成
+                    const overwrites = [{ id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }];
+                    let totalMembers = 1;
+                    let targetMention = '';
+
+                    if (task.role_id) {
+                        const role = await interaction.guild.roles.fetch(task.role_id);
+                        if (!role) return interaction.editReply('ロールが見つかりませんでした。');
+                        overwrites.push({ id: task.role_id, allow: [PermissionsBitField.Flags.ViewChannel], deny: [PermissionsBitField.Flags.SendMessages] });
+                        totalMembers = await getRoleMemberCount(interaction.guild, task.role_id);
+                        targetMention = `<@&${task.role_id}>`;
+                    } else if (task.user_id) {
+                        overwrites.push({ id: task.user_id, allow: [PermissionsBitField.Flags.ViewChannel], deny: [PermissionsBitField.Flags.SendMessages] });
+                        totalMembers = 1;
+                        targetMention = `<@${task.user_id}>`;
                     }
 
                     // 1. アナウンスチャンネル作成
                     const announcementChannel = await interaction.guild.channels.create({
                         name: `${task.name}`,
-                        type: 5, 
+                        type: 5, // GuildAnnouncement
                         parent: CATEGORY_INCOMPLETE,
-                        permissionOverwrites: [
-                            {
-                                id: interaction.guild.id,
-                                deny: [PermissionsBitField.Flags.ViewChannel],
-                            },
-                            {
-                                id: task.role_id,
-                                allow: [PermissionsBitField.Flags.ViewChannel],
-                                deny: [PermissionsBitField.Flags.SendMessages],
-                            },
-                        ],
+                        permissionOverwrites: overwrites,
                     });
 
-                    // 共通のVC権限 (カテゴリー継承)
-                    const commonVcOverwrites = [
-                        {
-                            id: interaction.guild.id,
-                            deny: [PermissionsBitField.Flags.ViewChannel],
-                        },
+                    // 2. 他のカテゴリーにテキストチャンネルを作成 (初期状態では管理者以外非表示)
+                    const subOverwrites = [
+                        { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }
                     ];
 
-                    const vcCompleted = await interaction.guild.channels.create({ name: task.name, type: 2, parent: CATEGORY_COMPLETED, permissionOverwrites: commonVcOverwrites });
-                    const vcExpired = await interaction.guild.channels.create({ name: task.name, type: 2, parent: CATEGORY_EXPIRED, permissionOverwrites: commonVcOverwrites });
-                    const vcFinished = await interaction.guild.channels.create({ name: task.name, type: 2, parent: CATEGORY_FINISHED, permissionOverwrites: commonVcOverwrites });
+                    const txtCompleted = await interaction.guild.channels.create({ name: task.name, type: 0, parent: CATEGORY_COMPLETED, permissionOverwrites: subOverwrites });
+                    const txtExpired = await interaction.guild.channels.create({ name: task.name, type: 0, parent: CATEGORY_EXPIRED, permissionOverwrites: subOverwrites });
+                    const txtFinished = await interaction.guild.channels.create({ name: task.name, type: 0, parent: CATEGORY_FINISHED, permissionOverwrites: subOverwrites });
 
-                    // ロール人数の確定
-                    await interaction.guild.members.fetch({ role: role.id });
-                    const totalMembers = role.members.size;
-                    console.log(`Task Create: Role(${role.name}) members count: ${totalMembers}`);
+                    // 3. フォロー設定
+                    await announcementChannel.addFollower(txtCompleted.id);
+                    await announcementChannel.addFollower(txtExpired.id);
+                    await announcementChannel.addFollower(txtFinished.id);
 
                     const embed = new EmbedBuilder()
                         .setTitle(`📝 タスク: ${task.name}`)
@@ -122,32 +112,39 @@ module.exports = {
                         .addFields(
                             { name: '期限', value: task.deadline, inline: true },
                             { name: 'タスクID', value: `\`${shortId}\``, inline: true },
-                            { name: '割り当てロール', value: `<@&${task.role_id}>`, inline: true },
+                            { name: '割り当て先', value: targetMention, inline: true },
                             { name: '進捗', value: `✅ 0 / ${totalMembers} 人完了`, inline: false }
                         )
                         .setColor(0xFAC84B)
                         .setTimestamp();
 
-                    const row = new ActionRowBuilder()
-                        .addComponents(
-                            new ButtonBuilder().setCustomId(`task_done_btn_${shortId}`).setLabel('完了しました').setEmoji('✅').setStyle(ButtonStyle.Success),
-                            new ButtonBuilder().setCustomId(`task_status_btn_${shortId}`).setLabel('完了状況を確認').setEmoji('📊').setStyle(ButtonStyle.Primary),
-                            new ButtonBuilder().setCustomId(`task_edit_btn_${shortId}`).setLabel('編集').setEmoji('🖋️').setStyle(ButtonStyle.Secondary)
-                        );
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(`task_done_btn_${shortId}`).setLabel('完了しました').setEmoji('✅').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId(`task_status_btn_${shortId}`).setLabel('完了状況を確認').setEmoji('📊').setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId(`task_edit_btn_${shortId}`).setLabel('編集').setEmoji('🖋️').setStyle(ButtonStyle.Secondary)
+                    );
 
-                    await announcementChannel.send({ 
-                        content: `<@&${task.role_id}> 新しいタスクが割り当てられました。`,
+                    const messageOptions = { 
+                        content: task.should_mention ? `${targetMention} 新しいタスクが割り当てられました。` : null,
                         embeds: [embed], 
                         components: [row] 
-                    });
+                    };
+
+                    if (task.is_silent) {
+                        messageOptions.flags = [MessageFlags.SuppressNotifications];
+                    }
+
+                    const message = await announcementChannel.send(messageOptions);
+
+                    await message.crosspost();
 
                     await db.from('tasks').update({
                         details: details,
                         total_role_count: totalMembers,
                         announcement_channel_id: announcementChannel.id,
-                        vc_completed_id: vcCompleted.id,
-                        vc_expired_id: vcExpired.id,
-                        vc_finished_id: vcFinished.id,
+                        vc_completed_id: txtCompleted.id,
+                        vc_expired_id: txtExpired.id,
+                        vc_finished_id: txtFinished.id,
                         status: 'pending'
                     }).eq('id', shortId);
 
@@ -168,15 +165,16 @@ module.exports = {
                 newDetails = resolveMentions(interaction.guild, newDetails);
 
                 await interaction.deferReply({ ephemeral: true });
-
                 const { data: task } = await db.from('tasks').select('*').eq('id', shortId).single();
                 if (!task) return interaction.editReply('タスクが見つかりませんでした。');
 
                 try {
-                    const role = await interaction.guild.roles.fetch(task.role_id);
-                    await interaction.guild.members.fetch({ role: task.role_id });
-                    const newTotalMembers = role ? role.members.size : task.total_role_count;
-                    console.log(`Task Edit: Role members count: ${newTotalMembers}`);
+                    let newTotalMembers = task.total_role_count;
+                    if (task.role_id) {
+                        newTotalMembers = await getRoleMemberCount(interaction.guild, task.role_id);
+                    } else if (task.user_id) {
+                        newTotalMembers = 1;
+                    }
 
                     await db.from('tasks').update({ deadline: newDeadline, details: newDetails, total_role_count: newTotalMembers }).eq('id', shortId);
 
@@ -186,15 +184,17 @@ module.exports = {
 
                     if (taskMsg) {
                         const completedCount = task.completed_user_ids ? task.completed_user_ids.length : 0;
+                        const targetMention = task.role_id ? `<@&${task.role_id}>` : `<@${task.user_id}>`;
                         const newEmbed = EmbedBuilder.from(taskMsg.embeds[0])
                             .setDescription(newDetails)
                             .setFields(
                                 { name: '期限', value: newDeadline, inline: true },
                                 { name: 'タスクID', value: `\`${shortId}\``, inline: true },
-                                { name: '割り当てロール', value: `<@&${task.role_id}>`, inline: true },
+                                { name: '割り当て先', value: targetMention, inline: true },
                                 { name: '進捗', value: `✅ ${completedCount} / ${newTotalMembers} 人完了`, inline: false }
                             );
                         await taskMsg.edit({ embeds: [newEmbed] });
+                        await taskMsg.crosspost().catch(() => {});
                     }
                     await interaction.editReply('✅ タスクを編集しました。');
                 } catch (e) {
@@ -219,7 +219,6 @@ module.exports = {
                 completedUsers.push(interaction.user.id);
                 await db.from('tasks').update({ completed_user_ids: completedUsers }).eq('id', shortId);
 
-                // 進捗Embed更新
                 try {
                     const channel = await interaction.guild.channels.fetch(task.announcement_channel_id);
                     const messages = await channel.messages.fetch({ limit: 50 });
@@ -236,12 +235,11 @@ module.exports = {
                     }
                 } catch (e) { console.error('Progress Update Error:', e); }
 
-                // 権限剥奪と付与
                 try {
                     const annChannel = await interaction.guild.channels.fetch(task.announcement_channel_id);
                     await annChannel.permissionOverwrites.edit(interaction.user.id, { ViewChannel: false });
-                    const vcComp = await interaction.guild.channels.fetch(task.vc_completed_id);
-                    await vcComp.permissionOverwrites.edit(interaction.user.id, { ViewChannel: true, Connect: false });
+                    const txtComp = await interaction.guild.channels.fetch(task.vc_completed_id);
+                    await txtComp.permissionOverwrites.edit(interaction.user.id, { ViewChannel: true, SendMessages: false });
                     await interaction.reply({ content: '✅ 完了しました！', ephemeral: true });
                 } catch (e) {
                     console.error('Permission Update Error:', e);
@@ -253,25 +251,23 @@ module.exports = {
             // --- タスク状況確認ボタン ---
             if (interaction.customId.startsWith('task_status_btn_')) {
                 const shortId = interaction.customId.replace('task_status_btn_', '');
-                console.log(`Status Check: Checking task ID ${shortId}`);
-                
-                const { data: task, error } = await db.from('tasks').select('*').eq('id', shortId).single();
-                if (error || !task) {
-                    console.error('Status Check: DB Fetch Error:', error);
-                    return interaction.reply({ content: 'タスク情報が取得できませんでした。', ephemeral: true });
-                }
+                const { data: task } = await db.from('tasks').select('*').eq('id', shortId).single();
+                if (!task) return interaction.reply({ content: 'タスクが見つかりませんでした。', ephemeral: true });
 
                 try {
-                    const role = await interaction.guild.roles.fetch(task.role_id);
-                    if (!role) return interaction.reply({ content: 'ロールが見つかりませんでした。', ephemeral: true });
+                    let members = [];
+                    if (task.role_id) {
+                        const role = await interaction.guild.roles.fetch(task.role_id);
+                        await interaction.guild.members.fetch({ role: task.role_id });
+                        members = Array.from(role.members.values());
+                    } else if (task.user_id) {
+                        const member = await interaction.guild.members.fetch(task.user_id);
+                        members = [member];
+                    }
 
-                    await interaction.guild.members.fetch({ role: task.role_id });
-                    const roleMembers = Array.from(role.members.values());
                     const completedIds = task.completed_user_ids || [];
-                    console.log(`Status Check: Role(${role.name}) members: ${roleMembers.length}, Completed: ${completedIds.length}`);
-
-                    const completedList = roleMembers.filter(m => completedIds.includes(m.id)).map(m => m.user.tag).join('\n') || 'なし';
-                    const pendingList = roleMembers.filter(m => !completedIds.includes(m.id)).map(m => m.user.tag).join('\n') || 'なし';
+                    const completedList = members.filter(m => completedIds.includes(m.id)).map(m => m.user.tag).join('\n') || 'なし';
+                    const pendingList = members.filter(m => !completedIds.includes(m.id)).map(m => m.user.tag).join('\n') || 'なし';
 
                     const content = `📊 **${task.name}** の完了状況\n\n` +
                         `\`\`\`diff\n+ 完了済み\n${completedList}\n\`\`\`\n` +
@@ -301,7 +297,7 @@ module.exports = {
                 return;
             }
 
-            // --- レポート解決 (既存) ---
+            // --- レポート解決 ---
             if (interaction.customId.startsWith('resolve_report_')) {
                 const reportId = interaction.customId.replace('resolve_report_', '');
                 const { data: report } = await db.from('reports').select('*').eq('id', reportId).single();
@@ -318,7 +314,7 @@ module.exports = {
                 return;
             }
 
-            // --- ボイチャ募集 (既存) ---
+            // --- ボイチャ募集 ---
             if (interaction.customId.startsWith('vc_recruit_')) {
                 const parts = interaction.customId.split('_');
                 const action = parts[2];
@@ -332,7 +328,6 @@ module.exports = {
                     await interaction.message.edit({ embeds: [newEmbed], components: [] });
                     return interaction.reply({ content: '締め切りました。', ephemeral: true });
                 }
-                // (join, later 処理は既存と同様)
                 return interaction.reply({ content: 'ボタンが押されました。', ephemeral: true });
             }
         }
