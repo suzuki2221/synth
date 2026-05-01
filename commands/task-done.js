@@ -51,11 +51,14 @@ module.exports = {
                     ViewChannel: false,
                 });
 
-                // 既存のオーバーライトを更新して、ロール全員が見れる（発言不可）ようにする
-                await announcementChannel.permissionOverwrites.edit(task.role_id, {
-                    ViewChannel: true,
-                    SendMessages: false,
-                });
+                // 既存のオーバーライトを更新して、対象（ロールまたはユーザー）が見れる（発言不可）ようにする
+                const targetId = task.role_id || task.user_id;
+                if (targetId) {
+                    await announcementChannel.permissionOverwrites.edit(targetId, {
+                        ViewChannel: true,
+                        SendMessages: false,
+                    });
+                }
                 
                 // 完了済みEmbedにステータス追加（任意）
                 try {

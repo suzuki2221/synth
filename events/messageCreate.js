@@ -1,10 +1,59 @@
 const { Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { supabase } = require('../supabase');
+const { chatWithAI } = require('../functions/aiUtils');
 
 module.exports = {
     name: Events.MessageCreate,
     async execute(message) {
         if (message.author.bot) return;
+
+        // --- AI 対話ロジック ---
+        const aiChannels = process.env.AI_CHANNELS ? process.env.AI_CHANNELS.split(',') : [];
+        const isMentioned = message.mentions.has(message.client.user);
+        const isInAiChannel = aiChannels.includes(message.channelId);
+
+        if (isMentioned || isInAiChannel) {
+            // メンション部分を削除してクリーンな入力を取得
+            const content = message.content.replace(`<@!${message.client.user.id}>`, '').replace(`<@${message.client.user.id}>`, '').trim();
+            
+            if (content || message.attachments.size > 0) {
+                await message.channel.sendTyping();
+                try {
+                    // TODO: 必要に応じて会話履歴をDBから取得する
+                    const aiResult = await chatWithAI(message.author.id, content);
+                    
+                    if (aiResult.type === 'text') {
+                        return message.reply(aiResult.text);
+                    } else if (aiResult.type === 'approval_required') {
+                        const embed = new EmbedBuilder()
+                            .setTitle('🛡️ SSHコマンド実行の確認')
+                            .setDescription(`AIが以下のコマンドを実行しようとしています。許可しますか？`)
+                            .addFields(
+                                { name: 'ノード', value: `\`${aiResult.nodeName}\``, inline: true },
+                                { name: 'コマンド', value: `\`\`\`bash\n${aiResult.command}\n\`\`\`` }
+                            )
+                            .setColor(0xFFA500);
+
+                        const row = new ActionRowBuilder().addComponents(
+                            new ButtonBuilder()
+                                .setCustomId(`ai_ssh_approve_${message.author.id}`)
+                                .setLabel('許可')
+                                .setStyle(ButtonStyle.Success),
+                            new ButtonBuilder()
+                                .setCustomId(`ai_ssh_deny_${message.author.id}`)
+                                .setLabel('拒否')
+                                .setStyle(ButtonStyle.Danger)
+                        );
+
+                        // 承認待ちデータを保存（ボタンのカスタムIDに埋め込むのは限界があるため一時的にセッション管理などが必要な場合もあるが、今回はシンプルに）
+                        return message.reply({ embeds: [embed], components: [row] });
+                    }
+                } catch (error) {
+                    console.error('AI Error:', error);
+                    return message.reply('申し訳ありません、AIとの対話中にエラーが発生しました。');
+                }
+            }
+        }
 
         // --- ボイチャ募集のトリガー検知 ---
         const recruitRegex = /^<@&(\d+)> (.+)$/;

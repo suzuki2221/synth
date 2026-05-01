@@ -25,6 +25,7 @@ module.exports = {
                 { name: 'ステータス', value: '⚠️ 未解決', inline: true }
             )
             .setColor(0xFAC84B)
+            .setFooter({ text: `作成者: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
             .setTimestamp();
 
         const message = await interaction.reply({ embeds: [embed], fetchReply: true });

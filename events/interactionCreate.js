@@ -3,6 +3,7 @@ const { supabase, supabaseAdmin } = require('../supabase');
 require('dotenv').config();
 
 const { getRoleMemberCount } = require('../functions/taskUtils');
+const { resumeChat, executeProxmoxCommand, proxmoxNodes } = require('../functions/aiUtils');
 
 // 管理用クライアントを使用 (フォールバックあり)
 const db = supabaseAdmin || supabase;
@@ -116,6 +117,7 @@ module.exports = {
                             { name: '進捗', value: `✅ 0 / ${totalMembers} 人完了`, inline: false }
                         )
                         .setColor(0xFAC84B)
+                        .setFooter({ text: `アサイナー: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
                         .setTimestamp();
 
                     const row = new ActionRowBuilder().addComponents(
@@ -125,7 +127,7 @@ module.exports = {
                     );
 
                     const messageOptions = { 
-                        content: task.should_mention ? `${targetMention} 新しいタスクが割り当てられました。` : null,
+                        content: task.should_mention ? `${targetMention} <@${interaction.user.id}> によって新しいタスクが割り当てられました。` : null,
                         embeds: [embed], 
                         components: [row] 
                     };
@@ -185,6 +187,9 @@ module.exports = {
                     if (taskMsg) {
                         const completedCount = task.completed_user_ids ? task.completed_user_ids.length : 0;
                         const targetMention = task.role_id ? `<@&${task.role_id}>` : `<@${task.user_id}>`;
+                        
+                        // 依頼者の情報を取得 (古いタスクへの対応も兼ねて)
+
                         const newEmbed = EmbedBuilder.from(taskMsg.embeds[0])
                             .setDescription(newDetails)
                             .setFields(
@@ -193,6 +198,8 @@ module.exports = {
                                 { name: '割り当て先', value: targetMention, inline: true },
                                 { name: '進捗', value: `✅ ${completedCount} / ${newTotalMembers} 人完了`, inline: false }
                             );
+                        
+
                         await taskMsg.edit({ embeds: [newEmbed] });
                         await taskMsg.crosspost().catch(() => {});
                     }
