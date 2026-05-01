@@ -337,6 +337,53 @@ module.exports = {
                 }
                 return interaction.reply({ content: 'ボタンが押されました。', ephemeral: true });
             }
+
+            // --- AI SSH承認 ---
+            if (interaction.customId.startsWith('ai_ssh_approve_') || interaction.customId.startsWith('ai_ssh_deny_')) {
+                const isApprove = interaction.customId.includes('approve');
+                const targetUserId = interaction.customId.split('_').pop();
+
+                if (interaction.user.id !== targetUserId) {
+                    return interaction.reply({ content: 'この操作は依頼者本人のみが可能です。', ephemeral: true });
+                }
+
+                await interaction.deferUpdate();
+
+                // 元のEmbedから情報を復元
+                const embed = interaction.message.embeds[0];
+                const nodeName = embed.fields.find(f => f.name === 'ノード').value.replace(/`/g, '');
+                const command = embed.description.split('```bash\n')[1]?.split('\n```')[0] || 
+                                embed.fields.find(f => f.name === 'コマンド').value.replace(/```bash\n|\n```/g, '');
+
+                if (isApprove) {
+                    const nodeConfig = proxmoxNodes.find(n => n.name === nodeName);
+                    try {
+                        const { stdout, stderr, code } = await executeProxmoxCommand(command, nodeConfig);
+                        const aiResult = await resumeChat(targetUserId, "executeProxmoxCommand", {
+                            node: nodeName,
+                            stdout,
+                            stderr,
+                            exitCode: code
+                        });
+
+                        await interaction.editReply({ 
+                            content: `✅ コマンドを実行しました。\n${aiResult.type === 'text' ? aiResult.text : '次の操作が必要です。'}`,
+                            embeds: [], components: [] 
+                        });
+                    } catch (error) {
+                        await interaction.editReply({ content: `❌ エラーが発生しました: ${error.message}`, embeds: [], components: [] });
+                    }
+                } else {
+                    const aiResult = await resumeChat(targetUserId, "executeProxmoxCommand", {
+                        error: "User denied the execution of this command."
+                    });
+                    await interaction.editReply({ 
+                        content: `🚫 実行を拒否しました。\n${aiResult.type === 'text' ? aiResult.text : '次の操作が必要です。'}`,
+                        embeds: [], components: [] 
+                    });
+                }
+                return;
+            }
         }
     },
 };
